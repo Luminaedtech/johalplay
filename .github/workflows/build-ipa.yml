@@ -13,19 +13,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract project (any .zip in the repo)
+      - name: Extract project (with diagnostics)
         run: |
-          ZIPFILE=$(ls *.zip 2>/dev/null | head -1)
+          echo ">> Repo contents:"
+          ls -la
+          echo ">> Looking for zip files:"
+          find . -name "*.zip" -not -path "./.git/*"
+          ZIPFILE=$(find . -maxdepth 1 -name "*.zip" | head -1)
           if [ -n "$ZIPFILE" ]; then
             echo ">> Unzipping $ZIPFILE ..."
-            unzip -oq "$ZIPFILE"
-            if [ -d johalplay ]; then
-              shopt -s dotglob
-              mv johalplay/* .
-              rmdir johalplay
-            fi
+            unzip -oq "$ZIPFILE" || echo ">> WARNING: unzip reported a problem with $ZIPFILE"
+          else
+            echo ">> No zip file found at repo root!"
           fi
-          test -f JohalPlay.xcodeproj/project.pbxproj || (echo "ERROR: JohalPlay.xcodeproj not found at repo root" && exit 1)
+          if [ -d johalplay ]; then
+            shopt -s dotglob
+            for f in johalplay/*; do
+              base=$(basename "$f")
+              if [ ! -e "$base" ]; then mv "$f" .; fi
+            done
+            rmdir johalplay 2>/dev/null || true
+          fi
+          echo ">> Repo contents after extraction:"
+          ls -la
+          if [ ! -f JohalPlay.xcodeproj/project.pbxproj ]; then
+            echo "ERROR: JohalPlay.xcodeproj not found. Searching..."
+            find . -name "project.pbxproj" -not -path "./.git/*" | head -5
+            exit 1
+          fi
           echo ">> Project files ready"
 
       - name: Show Xcode version
